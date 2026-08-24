@@ -1,11 +1,9 @@
-import 'dart:convert';
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import 'package:weather_app/additional_info_item.dart';
-import 'package:weather_app/hourly_forecast_item.dart';
-import 'package:http/http.dart' as http;
-import 'package:weather_app/api_key';
+import 'package:weather_app/widgets/additional_info_item.dart';
+import 'package:weather_app/widgets/hourly_forecast_item.dart';
+import 'package:weather_app/view_models/weather_view_model.dart';
 
 class WeatherScreen extends StatefulWidget {
   const WeatherScreen({super.key});
@@ -15,35 +13,20 @@ class WeatherScreen extends StatefulWidget {
 }
 
 class _WeatherScreenState extends State<WeatherScreen> {
-  late Future<Map<String, dynamic>> weather;
-
-  Future<Map<String, dynamic>> getCurrentWeather() async {
-    try {
-      String cityName = 'Bangladesh';
-      final res = await http.get(
-        // Construct the API URL with city name and your API key (from .env)
-        Uri.parse(
-          'https://api.openweathermap.org/data/2.5/forecast?q=$cityName&APPID=$openWeatherAPIKey',
-        ),
-      );
-
-      final data = jsonDecode(res.body);
-
-      if (data['cod'] != '200') {
-        throw 'An unexpected error occurred';
-      }
-
-      return data;
-    } catch (e) {
-      throw e.toString();
-    }
-  }
+  final WeatherViewModel _viewModel = WeatherViewModel();
 
   @override
   void initState() {
     super.initState();
-    weather = getCurrentWeather();
+    _viewModel.fetchWeather();
   }
+  
+  @override
+  void dispose() {
+    _viewModel.dispose();
+    super.dispose();
+  }
+
 // Build the UI of the WeatherScreen
   @override
   Widget build(BuildContext context) {
@@ -60,31 +43,34 @@ class _WeatherScreenState extends State<WeatherScreen> {
           IconButton(
             onPressed: () {
               // Update the weather data on refresh button press
-              setState(() {
-
-              });
+              _viewModel.fetchWeather();
             },
             icon: const Icon(Icons.refresh),
           ),
         ],
       ),
-      body: FutureBuilder(
-        future: weather,
-        builder: (context, snapshot) {
+      body: AnimatedBuilder(
+        animation: _viewModel,
+        builder: (context, child) {
           // Show a loading indicator while data is being fetched
-          if (snapshot.connectionState == ConnectionState.waiting) {
+          if (_viewModel.isLoading && _viewModel.weatherData == null) {
             return const Center(
               child: CircularProgressIndicator.adaptive(),
             );
           }
 
-          if (snapshot.hasError) {
+          if (_viewModel.errorMessage.isNotEmpty && _viewModel.weatherData == null) {
             return Center(
-              child: Text(snapshot.error.toString()),
+              child: Text(_viewModel.errorMessage),
             );
           }
+
+          if (_viewModel.weatherData == null) {
+            return const Center(child: Text('No Data'));
+          }
+
           // Extract the current weather data
-          final data = snapshot.data!;
+          final data = _viewModel.weatherData!;
           final currentWeatherData = data['list'][0];
           final currentTemp = currentWeatherData['main']['temp'];
           final currentSky = currentWeatherData['weather'][0]['main'];
